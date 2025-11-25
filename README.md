@@ -93,12 +93,5 @@ source venv/bin/activate
 # Run tests
 pytest
 
-Contributing
-Fork the repository.
-Create a feature branch (git checkout -b feature/NewFeature).
-Commit your changes.
-Push to the branch.
-Open a Pull Request.
-
 Developed by- Yuval Alexandrony
 
