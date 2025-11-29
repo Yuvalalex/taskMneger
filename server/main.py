@@ -31,12 +31,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
-client = AsyncIOMotorClient(MONGO_URI)
-db = client.ticktick_clone
-tasks_collection = db.tasks
-users_collection = db.users
-lists_collection = db.lists
+# --- Database Connection Logic (FIXED) ---
+# We initialize these as None and connect only on "startup"
+client: Optional[AsyncIOMotorClient] = None
+db = None
+tasks_collection = None
+users_collection = None
+lists_collection = None
+
+
+@app.on_event("startup")
+async def startup_db_client():
+    global client, db, tasks_collection, users_collection, lists_collection
+    MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+    client = AsyncIOMotorClient(MONGO_URI)
+    db = client.ticktick_clone
+
+    # Initialize collections
+    tasks_collection = db.tasks
+    users_collection = db.users
+    lists_collection = db.lists
+    print("Connected to MongoDB!")
+
+
+@app.on_event("shutdown")
+async def shutdown_db_client():
+    global client
+    if client:
+        client.close()
+        print("MongoDB Connection Closed.")
+
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -47,15 +71,18 @@ class User(BaseModel):
     username: str
     password: str
 
+
 class CustomList(BaseModel):
     id: Optional[str] = Field(None, alias="_id")
     owner_id: str = ""
     name: str
     color: str = "#6b63ff"
 
+
 class Subtask(BaseModel):
     title: str
     isDone: bool = False
+
 
 class TaskModel(BaseModel):
     id: Optional[str] = Field(None, alias="_id")
@@ -81,6 +108,7 @@ class TaskModel(BaseModel):
         populate_by_name = True
         json_encoders = {ObjectId: str}
 
+
 class TaskCreate(BaseModel):
     title: str
     tag: str = "General"
@@ -92,6 +120,7 @@ class TaskCreate(BaseModel):
     dueDate: Optional[str] = None
     startTime: Optional[str] = "09:00"
     endTime: Optional[str] = "10:00"
+
 
 class TaskUpdate(BaseModel):
     title: str
@@ -111,17 +140,19 @@ class TaskUpdate(BaseModel):
     isDone: bool = False
 
 
-
 # --- Helpers ---
 def verify_password(plain, hashed): return pwd_context.verify(plain, hashed)
 
+
 def get_password_hash(password): return pwd_context.hash(password)
+
 
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     try:
@@ -211,7 +242,6 @@ async def get_tasks(mode: Optional[str] = None, current_user: dict = Depends(get
     tasks = []
     query = {}
 
-    # === LOGIC FIX: VISIBILITY ===
     if mode == "all":
         query = {}
     else:
@@ -227,7 +257,6 @@ async def get_tasks(mode: Optional[str] = None, current_user: dict = Depends(get
             ]
         }
 
-    # === SORTING FIX ===
     cursor = tasks_collection.find(query).sort([
         ("isDone", 1),
         ("priority", 1),
