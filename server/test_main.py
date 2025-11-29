@@ -2,8 +2,7 @@ from fastapi.testclient import TestClient
 from main import app
 import pytest
 
-# Fixture: Creates a fresh client for each test.
-# The 'with' context manager triggers the @app.on_event("startup") in main.py
+
 @pytest.fixture
 def client():
     with TestClient(app) as c:
