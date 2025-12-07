@@ -31,7 +31,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Database Connection Logic (FIXED) ---
+# --- Database Connection Logic  ---
 # We initialize these as None and connect only on "startup"
 client: Optional[AsyncIOMotorClient] = None
 db = None
