@@ -1,4 +1,2 @@
-import setupTests from './setupTests';
-
-// This file is auto-imported by react-scripts during test runs
-export default setupTests;
+// Jest setup file - automatically imported by react-scripts before tests
+// jest-dom matchers are available globally

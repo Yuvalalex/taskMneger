@@ -13,7 +13,7 @@ describe('Auth Component', () => {
         setAuthMode={jest.fn()}
         setToken={mockSetToken}
         setAuthError={mockSetAuthError}
-      />
+      />,
     );
     expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
@@ -26,7 +26,7 @@ describe('Auth Component', () => {
         setAuthMode={jest.fn()}
         setToken={mockSetToken}
         setAuthError={mockSetAuthError}
-      />
+      />,
     );
     const registerButton = screen.getByText(/create account/i);
     expect(registerButton).toBeInTheDocument();
@@ -40,7 +40,7 @@ describe('Auth Component', () => {
         setAuthMode={setAuthMode}
         setToken={mockSetToken}
         setAuthError={mockSetAuthError}
-      />
+      />,
     );
 
     const toggleButton = screen.getByText(/sign up/i);

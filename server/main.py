@@ -313,7 +313,7 @@ async def update_list(
         raise HTTPException(400)
     await lists_collection.update_one(
         {"_id": ObjectId(id), "owner_id": str(current_user["_id"])},
-        {"$set": {"name": lst.name, "color": lst.color}}
+        {"$set": {"name": lst.name, "color": lst.color}},
     )
     updated = await lists_collection.find_one({"_id": ObjectId(id)})
     updated["_id"] = str(updated["_id"])
