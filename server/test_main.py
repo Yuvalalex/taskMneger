@@ -8,6 +8,7 @@ def client():
     with TestClient(app) as c:
         yield c
 
+
 TEST_USER = {"username": "unit_tester", "password": "password123"}
 
 
@@ -31,7 +32,9 @@ def test_health_check(client):
 def test_create_task(client):
     """Test creating a task with Auth"""
     headers = get_auth_headers(client)
-    response = client.post("/tasks", json={"title": "Test Task", "priority": 1}, headers=headers)
+    response = client.post(
+        "/tasks", json={"title": "Test Task", "priority": 1}, headers=headers
+    )
     assert response.status_code == 200
     assert response.json()["title"] == "Test Task"
     assert response.json()["priority"] == 1
