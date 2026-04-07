@@ -13,10 +13,15 @@ import time
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
 from jose import JWTError, jwt
+from dotenv import load_dotenv
 
-SECRET_KEY = "my_secret_key_change_this_in_production"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30
+# Load environment variables
+load_dotenv()
+
+# Configuration from environment variables
+SECRET_KEY = os.getenv("SECRET_KEY", "change_this_secret_key_in_production_min_32_chars")
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 43200))
 
 app = FastAPI()
 
@@ -141,50 +146,120 @@ class TaskUpdate(BaseModel):
 
 
 # --- Helpers ---
-def verify_password(plain, hashed): return pwd_context.verify(plain, hashed)
+def verify_password(plain: str, hashed: str) -> bool:
+    """
+    Verify a plain text password against its hashed version.
+    
+    Args:
+        plain: Plain text password to verify
+        hashed: Hashed password to verify against
+    
+    Returns:
+        bool: True if password matches, False otherwise
+    """
+    return pwd_context.verify(plain, hashed)
 
 
-def get_password_hash(password): return pwd_context.hash(password)
+def get_password_hash(password: str) -> str:
+    """
+    Hash a plain text password using bcrypt.
+    
+    Args:
+        password: Plain text password to hash
+    
+    Returns:
+        str: Hashed password
+    """
+    return pwd_context.hash(password)
 
 
-def create_access_token(data: dict):
+def create_access_token(data: dict) -> str:
+    """
+    Create a JWT access token with expiration.
+    
+    Args:
+        data: Dictionary containing user information to encode
+    
+    Returns:
+        str: Encoded JWT token
+    """
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)):
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict:
+    """
+    Retrieve current authenticated user from JWT token.
+    
+    Args:
+        token: JWT token from Authorization header
+    
+    Returns:
+        dict: User document from database
+    
+    Raises:
+        HTTPException: 401 if token is invalid or user not found
+    """
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
-        if not username: raise HTTPException(401)
+        if not username:
+            raise HTTPException(401)
     except:
         raise HTTPException(401)
     user = await users_collection.find_one({"username": username})
-    if not user: raise HTTPException(401)
+    if not user:
+        raise HTTPException(401)
     return user
 
 
 # --- Routes ---
 
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(file: UploadFile = File(...)) -> dict:
+    """
+    Upload and store a file attachment.
+    
+    Args:
+        file: File to upload
+    
+    Returns:
+        dict: Contains filename and URL path to access the file
+    """
     filename = f"{datetime.now().timestamp()}_{file.filename}"
-    with open(f"uploads/{filename}", "wb+") as f: shutil.copyfileobj(file.file, f)
+    with open(f"uploads/{filename}", "wb+") as f:
+        shutil.copyfileobj(file.file, f)
     return {"filename": filename, "url": f"/uploads/{filename}"}
 
 
 @app.get("/users/all", response_model=List[str])
-async def get_all_users():
+async def get_all_users() -> List[str]:
+    """
+    Retrieve all usernames in the system.
+    
+    Returns:
+        List[str]: List of all usernames
+    """
     users = []
-    async for u in users_collection.find({}): users.append(u["username"])
+    async for u in users_collection.find({}):
+        users.append(u["username"])
     return users
 
 
 # Lists
 @app.get("/lists", response_model=List[CustomList])
-async def get_lists(current_user: dict = Depends(get_current_user)):
+async def get_lists(current_user: dict = Depends(get_current_user)) -> List[CustomList]:
+    """
+    Retrieve all task lists for the current user.
+    
+    Args:
+        current_user: Authenticated user from JWT token
+    
+    Returns:
+        List[CustomList]: List of the user's custom lists
+    """
     lists = []
     async for doc in lists_collection.find({"owner_id": str(current_user["_id"])}):
         doc["_id"] = str(doc["_id"])
@@ -193,7 +268,17 @@ async def get_lists(current_user: dict = Depends(get_current_user)):
 
 
 @app.post("/lists", response_model=CustomList)
-async def create_list(l: CustomList, current_user: dict = Depends(get_current_user)):
+async def create_list(l: CustomList, current_user: dict = Depends(get_current_user)) -> CustomList:
+    """
+    Create a new task list for the current user.
+    
+    Args:
+        l: CustomList object with name and color
+        current_user: Authenticated user from JWT token
+    
+    Returns:
+        CustomList: Created list with _id
+    """
     new_l = l.dict()
     new_l["owner_id"] = str(current_user["_id"])
     del new_l["id"]
@@ -204,37 +289,103 @@ async def create_list(l: CustomList, current_user: dict = Depends(get_current_us
 
 
 @app.put("/lists/{id}", response_model=CustomList)
-async def update_list(id: str, l: CustomList, current_user: dict = Depends(get_current_user)):
-    if not ObjectId.is_valid(id): raise HTTPException(400)
-    await lists_collection.update_one({"_id": ObjectId(id), "owner_id": str(current_user["_id"])},
-                                      {"$set": {"name": l.name, "color": l.color}})
+async def update_list(id: str, l: CustomList, current_user: dict = Depends(get_current_user)) -> CustomList:
+    """
+    Update an existing task list.
+    
+    Args:
+        id: ID of the list to update
+        l: Updated CustomList data
+        current_user: Authenticated user from JWT token
+    
+    Returns:
+        CustomList: Updated list
+    
+    Raises:
+        HTTPException: 400 if invalid ID, 404 if list not found
+    """
+    if not ObjectId.is_valid(id):
+        raise HTTPException(400)
+    await lists_collection.update_one(
+        {"_id": ObjectId(id), "owner_id": str(current_user["_id"])},
+        {"$set": {"name": l.name, "color": l.color}}
+    )
     updated = await lists_collection.find_one({"_id": ObjectId(id)})
     updated["_id"] = str(updated["_id"])
     return updated
 
 
 @app.delete("/lists/{id}")
-async def delete_list(id: str, current_user: dict = Depends(get_current_user)):
-    if not ObjectId.is_valid(id): raise HTTPException(400)
-    res = await lists_collection.delete_one({"_id": ObjectId(id), "owner_id": str(current_user["_id"])})
-    if res.deleted_count == 0: raise HTTPException(404, "List not found")
+async def delete_list(id: str, current_user: dict = Depends(get_current_user)) -> dict:
+    """
+    Delete a task list and reassign its tasks.
+    
+    Args:
+        id: ID of the list to delete
+        current_user: Authenticated user from JWT token
+    
+    Returns:
+        dict: Success confirmation
+    
+    Raises:
+        HTTPException: 400 if invalid ID, 404 if list not found
+    """
+    if not ObjectId.is_valid(id):
+        raise HTTPException(400)
+    res = await lists_collection.delete_one(
+        {"_id": ObjectId(id), "owner_id": str(current_user["_id"])}
+    )
+    if res.deleted_count == 0:
+        raise HTTPException(404, "List not found")
     await tasks_collection.update_many({"list_id": id}, {"$set": {"list_id": None}})
     return {"success": True}
 
 
 # Auth & Tasks
 @app.post("/register")
-async def register(user: User):
-    if await users_collection.find_one({"username": user.username}): raise HTTPException(400, "Taken")
-    await users_collection.insert_one({"username": user.username, "hashed_password": get_password_hash(user.password)})
+async def register(user: User) -> dict:
+    """
+    Register a new user account.
+    
+    Args:
+        user: User with username and password
+    
+    Returns:
+        dict: Confirmation message
+    
+    Raises:
+        HTTPException: 400 if username already taken
+    """
+    if await users_collection.find_one({"username": user.username}):
+        raise HTTPException(400, "Taken")
+    await users_collection.insert_one({
+        "username": user.username,
+        "hashed_password": get_password_hash(user.password)
+    })
     return {"message": "Created"}
 
 
 @app.post("/token")
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> dict:
+    """
+    Authenticate user and return JWT access token.
+    
+    Args:
+        form_data: OAuth2 form with username and password
+    
+    Returns:
+        dict: Contains access_token and token_type
+    
+    Raises:
+        HTTPException: 401 if credentials invalid
+    """
     user = await users_collection.find_one({"username": form_data.username})
-    if not user or not verify_password(form_data.password, user["hashed_password"]): raise HTTPException(401)
-    return {"access_token": create_access_token(data={"sub": user["username"]}), "token_type": "bearer"}
+    if not user or not verify_password(form_data.password, user["hashed_password"]):
+        raise HTTPException(401)
+    return {
+        "access_token": create_access_token(data={"sub": user["username"]}),
+        "token_type": "bearer"
+    }
 
 
 @app.get("/tasks", response_model=List[TaskModel])
