@@ -23,8 +23,8 @@ RUN npm install -g serve
 COPY --from=builder /app/build ./build
 
 # Create non-root user for security
-RUN addgroup -g 1000 appuser && \
-    adduser -D -u 1000 -G appuser appuser && \
+RUN addgroup -g 1001 appuser && \
+    adduser -D -u 1001 -G appuser appuser && \
     chown -R appuser:appuser /app
 
 USER appuser

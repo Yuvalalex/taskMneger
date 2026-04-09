@@ -400,7 +400,7 @@ async def get_tasks(
     query = {}
 
     if mode == "all":
-        query = {}
+        query = {"owner_id": str(current_user["_id"])}  # SECURITY FIX: Only fetch tasks owned by current user
     else:
         query = {
             "$or": [
@@ -464,6 +464,17 @@ async def create_task(task: TaskCreate, current_user: dict = Depends(get_current
 async def update_task(
     id: str, update: TaskUpdate, current_user: dict = Depends(get_current_user)
 ):
+    if not ObjectId.is_valid(id):
+        raise HTTPException(400, "Invalid ID")
+    existing = await tasks_collection.find_one({
+        "_id": ObjectId(id),
+        "$or": [
+            {"owner_id": str(current_user["_id"])},
+            {"assignee": current_user["username"]}
+        ]
+    })
+    if not existing:
+        raise HTTPException(404, "Task not found or unauthorized")
     p_date = None
     if update.dueDate:
         try:
@@ -487,32 +498,52 @@ async def update_task(
 
 
 @app.put("/tasks/{id}", response_model=TaskModel)
-async def toggle(id: str):
-    t = await tasks_collection.find_one({"_id": ObjectId(id)})
-    if t:
-        await tasks_collection.update_one(
-            {"_id": ObjectId(id)}, {"$set": {"isDone": not t["isDone"]}}
-        )
+async def toggle(id: str, current_user: dict = Depends(get_current_user)):
+    if not ObjectId.is_valid(id):
+        raise HTTPException(400, "Invalid ID")
+    t = await tasks_collection.find_one({
+        "_id": ObjectId(id),
+        "$or": [
+            {"owner_id": str(current_user["_id"])},
+            {"assignee": current_user["username"]}
+        ]
+    })
+    if not t:
+        raise HTTPException(404, "Task not found or unauthorized")
+        
+    await tasks_collection.update_one(
+        {"_id": ObjectId(id)}, {"$set": {"isDone": not t["isDone"]}}
+    )
     u = await tasks_collection.find_one({"_id": ObjectId(id)})
     u["_id"] = str(u["_id"])
     return u
 
 
 @app.delete("/tasks/{id}")
-async def del_task(id: str):
-    t = await tasks_collection.find_one({"_id": ObjectId(id)})
-    if t:
-        if t.get("isDeleted"):
-            await tasks_collection.delete_one({"_id": ObjectId(id)})
-        else:
-            await tasks_collection.update_one(
-                {"_id": ObjectId(id)}, {"$set": {"isDeleted": True}}
-            )
+async def del_task(id: str, current_user: dict = Depends(get_current_user)):
+    if not ObjectId.is_valid(id):
+        raise HTTPException(400, "Invalid ID")
+    t = await tasks_collection.find_one({"_id": ObjectId(id), "owner_id": str(current_user["_id"])})
+    if not t:
+        raise HTTPException(404, "Task not found or unauthorized")
+        
+    if t.get("isDeleted"):
+        await tasks_collection.delete_one({"_id": ObjectId(id)})
+    else:
+        await tasks_collection.update_one(
+            {"_id": ObjectId(id)}, {"$set": {"isDeleted": True}}
+        )
     return {"success": True}
 
 
 @app.put("/tasks/{id}/restore", response_model=TaskModel)
-async def res(id: str):
+async def res(id: str, current_user: dict = Depends(get_current_user)):
+    if not ObjectId.is_valid(id):
+        raise HTTPException(400, "Invalid ID")
+    t = await tasks_collection.find_one({"_id": ObjectId(id), "owner_id": str(current_user["_id"])})
+    if not t:
+        raise HTTPException(404, "Task not found or unauthorized")
+        
     await tasks_collection.update_one(
         {"_id": ObjectId(id)}, {"$set": {"isDeleted": False}}
     )
