@@ -19,7 +19,7 @@ import ResponsibilityView from './components/views/ResponsibilityView';
 import YearView from './components/views/YearView';
 import SettingsView from './components/views/SettingsView';
 
-const API_URL = 'http://localhost:5001';
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
 function App() {
   // --- STATE MANAGEMENT ---
@@ -52,6 +52,8 @@ function App() {
   const [editingTask, setEditingTask] = useState(null);
   const [draggedTask, setDraggedTask] = useState(null);
   const [compactHours, setCompactHours] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [toast, setToast] = useState(null);
 
   // Settings
   const [defaultSettings, setDefaultSettings] = useState(
@@ -92,6 +94,7 @@ function App() {
       setTasks(res.data);
     } catch (e) {
       if (e.response?.status === 401) handleLogout();
+      else console.error('Failed to fetch tasks:', e);
     }
   };
 
@@ -99,18 +102,28 @@ function App() {
     try {
       const res = await axios.get(`${API_URL}/lists`, getAuthHeader());
       setLists(res.data);
-    } catch (e) {}
+    } catch (e) {
+      console.error('Failed to fetch lists:', e);
+    }
   };
   const fetchUsers = async () => {
     try {
       const res = await axios.get(`${API_URL}/users/all`);
       setAllUsers(res.data);
-    } catch (e) {}
+    } catch (e) {
+      console.error('Failed to fetch users:', e);
+    }
   };
 
   // --- ACTIONS: AUTH ---
   const handleLogin = async (e) => {
     e.preventDefault();
+    setAuthError('');
+    if (!authUsername.trim() || !authPassword.trim()) {
+      setAuthError('Please fill in all fields.');
+      return;
+    }
+    setIsLoading(true);
     try {
       const fd = new FormData();
       fd.append('username', authUsername);
@@ -122,20 +135,42 @@ function App() {
       setUsername(authUsername);
       fetchTasks(res.data.access_token);
     } catch {
-      setAuthError('Error');
+      setAuthError('Invalid username or password.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleRegister = async (e) => {
     e.preventDefault();
+    setAuthError('');
+    if (!authUsername.trim() || !authPassword.trim()) {
+      setAuthError('Please fill in all fields.');
+      return;
+    }
+    if (authUsername.trim().length < 3) {
+      setAuthError('Username must be at least 3 characters.');
+      return;
+    }
+    if (authPassword.length < 6) {
+      setAuthError('Password must be at least 6 characters.');
+      return;
+    }
+    setIsLoading(true);
     try {
       await axios.post(`${API_URL}/register`, {
         username: authUsername,
         password: authPassword,
       });
       handleLogin(e);
-    } catch {
-      setAuthError('Error');
+    } catch (err) {
+      if (err.response?.status === 400) {
+        setAuthError('Username already taken.');
+      } else {
+        setAuthError('Registration failed. Please try again.');
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -162,8 +197,18 @@ function App() {
     });
   };
 
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
   const saveTaskChanges = async () => {
     if (!editingTask) return;
+    if (!editingTask.title) {
+      showToast('Please enter a Task Title before saving.', 'error');
+      return;
+    }
+    setIsLoading(true);
     try {
       const payload = {
         ...editingTask,
@@ -175,13 +220,18 @@ function App() {
           payload,
           getAuthHeader(),
         );
+        showToast('Task updated successfully!');
       } else {
         await axios.post(`${API_URL}/tasks`, payload, getAuthHeader());
+        showToast('Task created successfully!');
       }
       setEditingTask(null);
       fetchTasks(token, viewMode === 'responsibility');
     } catch (err) {
-      console.error(err);
+      console.error('Save task failed:', err);
+      showToast('Failed to save task. Please try again.', 'error');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -190,14 +240,21 @@ function App() {
       await axios.delete(`${API_URL}/tasks/${id}`, getAuthHeader());
       fetchTasks(token, viewMode === 'responsibility');
       if (editingTask?._id === id) setEditingTask(null);
-    } catch {}
+      showToast('Task deleted.');
+    } catch (err) {
+      console.error('Delete task failed:', err);
+      showToast('Failed to delete task.', 'error');
+    }
   };
 
   const toggleTask = async (id) => {
     try {
       await axios.put(`${API_URL}/tasks/${id}`, {}, getAuthHeader());
       fetchTasks(token, viewMode === 'responsibility');
-    } catch {}
+    } catch (err) {
+      console.error('Toggle task failed:', err);
+      showToast('Failed to update task status.', 'error');
+    }
   };
 
   const quickAddTask = async (e) => {
@@ -259,7 +316,7 @@ function App() {
       );
       setLists([...lists, res.data]);
       setNewListName('');
-    } catch (e) {}
+    } catch (e) { }
   };
   const startEditingList = (l) => {
     setEditingListId(l._id);
@@ -275,7 +332,7 @@ function App() {
       );
       setLists(lists.map((l) => (l._id === id ? res.data : l)));
       setEditingListId(null);
-    } catch (e) {}
+    } catch (e) { }
   };
   const deleteList = async (id) => {
     if (!window.confirm('Delete list?')) return;
@@ -284,7 +341,7 @@ function App() {
       setLists(lists.filter((l) => l._id !== id));
       if (currentList?._id === id) setCurrentList(null);
       fetchTasks(token, viewMode === 'responsibility');
-    } catch (e) {}
+    } catch (e) { }
   };
 
   // --- HELPERS ---
@@ -429,6 +486,7 @@ function App() {
         handleLogin={handleLogin}
         handleRegister={handleRegister}
         authError={authError}
+        isLoading={isLoading}
       />
     );
   }
@@ -482,22 +540,22 @@ function App() {
         )}
 
         {(viewMode === 'timeline' || viewMode === 'month')
-        && viewMode === 'timeline' ? (
-          <TimelineView
-            currentDateBase={currentDateBase}
-            changeDateBase={changeDateBase}
-            timelineDays={timelineDays}
-            compactHours={compactHours}
-            setCompactHours={setCompactHours}
-            visibleTasks={visibleTasks}
-            handleDragOver={handleDragOver}
-            handleDragStart={handleDragStart}
-            handleDragEnd={handleDragEnd}
-            handleTimelineDrop={handleTimelineDrop}
-            openEditModal={openEditModal}
-            openNewTaskModal={openNewTaskModal}
-            toggleTask={toggleTask}
-          />
+          && viewMode === 'timeline' ? (
+            <TimelineView
+              currentDateBase={currentDateBase}
+              changeDateBase={changeDateBase}
+              timelineDays={timelineDays}
+              compactHours={compactHours}
+              setCompactHours={setCompactHours}
+              visibleTasks={visibleTasks}
+              handleDragOver={handleDragOver}
+              handleDragStart={handleDragStart}
+              handleDragEnd={handleDragEnd}
+              handleTimelineDrop={handleTimelineDrop}
+              openEditModal={openEditModal}
+              openNewTaskModal={openNewTaskModal}
+              toggleTask={toggleTask}
+            />
           ) : viewMode === 'month' ? (
             <MonthView
               currentDateBase={currentDateBase}
@@ -563,7 +621,20 @@ function App() {
         updateSubtaskTitle={updateSubtaskTitle}
         removeSubtask={removeSubtask}
         handleSubtaskKeyDown={handleSubtaskKeyDown}
+        isLoading={isLoading}
       />
+
+      {toast && (
+        <div className={`toast toast-${toast.type}`}>
+          {toast.message}
+        </div>
+      )}
+
+      {isLoading && (
+        <div className="loading-overlay">
+          <div className="spinner" />
+        </div>
+      )}
     </div>
   );
 }

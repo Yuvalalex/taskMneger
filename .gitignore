@@ -16,3 +16,6 @@ uploads/*
 
 # Ignore Database data
 mongo-data/
+
+# Ignore environment secrets
+.env

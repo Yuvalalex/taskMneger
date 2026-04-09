@@ -25,6 +25,7 @@ function TaskModal({
   updateSubtaskTitle,
   removeSubtask,
   handleSubtaskKeyDown,
+  isLoading,
 }) {
   if (!editingTask) return null;
 
@@ -37,6 +38,8 @@ function TaskModal({
             className="modal-title-input"
             value={editingTask.title}
             onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })}
+            placeholder="Type task title here..."
+            autoFocus
           />
           <button className="close-btn" onClick={() => setEditingTask(null)}>
             <FaTimes />
@@ -257,6 +260,7 @@ function TaskModal({
         <div className="modal-footer">
           <button
             className="delete-modal-btn"
+            disabled={isLoading}
             onClick={() => {
               deleteTask(editingTask._id);
               setEditingTask(null);
@@ -266,8 +270,8 @@ function TaskModal({
             {' '}
             Delete
           </button>
-          <button className="save-btn" onClick={saveTaskChanges}>
-            Save
+          <button className="save-btn" onClick={saveTaskChanges} disabled={isLoading}>
+            {isLoading ? 'Saving...' : 'Save'}
           </button>
         </div>
       </div>
