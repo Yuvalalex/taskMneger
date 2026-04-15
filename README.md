@@ -2,7 +2,7 @@
 
 **Task Manager** is a high-performance Full-Stack application for intelligent task and time management, built with React, FastAPI, and MongoDB.
 
-[![CI/CD](https://github.com/Yuvalalex/taskMneger/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/Yuvalalex/taskMneger/actions)
+
 
 ---
 
